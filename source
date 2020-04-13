@@ -1,0 +1,118 @@
+#include<Siv3D.hpp>
+
+struct Data {
+	bool success;
+};
+
+using App = SceneManager<String, Data>;
+
+class Title :public App::Scene {
+	const Font titleFont{ 70 };
+public:
+	Title(const InitData& init) :
+		IScene(init) {}
+	void update() override {
+		if (SimpleGUI::ButtonAt(U"遊ぶ", { Scene::CenterF().x,400 })) {
+			changeScene(U"Game");
+		}
+		if (SimpleGUI::ButtonAt(U"終わる", { Scene::CenterF().x,450 })) {
+			System::Exit();
+		}
+	}
+	void draw() const override {
+		titleFont(U"ClickObject!!!").drawAt({ Scene::CenterF().x,150 });
+	}
+};
+class Game :public App::Scene {
+	const Font font{ 60 };
+
+	Circle c;
+	Vec2 v;
+
+	Effect effect;
+
+	Stopwatch timeKeeper{ true };
+	Timer effectTimer{ 2.0s,true };
+
+	class Ring :public IEffect {
+		const Vec2 pos;
+	public:
+		Ring(const Vec2& pos) :
+			pos(pos) {}
+		bool update(double t) override {
+			if (0 <= t && t <= 0.6) {
+				Circle{ pos,t * 100 }.drawFrame(2.0);
+			}
+			if (0.2 <= t && t <= 0.8) {
+				Circle{ pos,(t - 0.2) * 100 }.drawFrame(2.0);
+			}
+			if (0.4 <= t && t <= 1.0) {
+				Circle{ pos,(t - 0.4) * 100 }.drawFrame(2.0);
+			}
+			return t <= 1.0;
+		}
+	};
+public:
+	Game(const InitData& init) :
+		IScene(init),
+		c(RandomVec2(Scene::Rect().stretched(-50)), 50.0),
+		v(RandomVec2(Random(250.0, 350.0))) {}
+	void update() override {
+		const double delta = Scene::DeltaTime();
+		const Rect area = Scene::Rect();
+		if (area.right().intersects(c) || area.left().intersects(c)) {
+			v.x *= -1;
+		}
+		if (area.top().intersects(c) || area.bottom().intersects(c)) {
+			v.y *= -1;
+		}
+		c.moveBy(v * delta);
+
+		if (effectTimer.reachedZero()) {
+			effect.add<Ring>(c.center);
+			effectTimer.restart();
+		}
+
+		if (MouseL.down()) {
+			getData().success = c.mouseOver();
+			changeScene(U"Result");
+		}
+	}
+	void draw() const override {
+		effect.update();
+		font(timeKeeper.format()).draw();
+	}
+	void drawFadeOut(double t) const override {
+		c.draw(getData().success ? Palette::Red : Palette::White);
+		draw();
+	}
+};
+class Result :public App::Scene {
+	const Font font{ 70 };
+public:
+	Result(const InitData& init) :
+		IScene(init) {}
+	void update() override {
+		if (SimpleGUI::ButtonAt(U"タイトルに戻る", { Scene::CenterF().x,400.0 })) {
+			changeScene(U"Title");
+		}
+		if (SimpleGUI::ButtonAt(U"もう一度", { Scene::CenterF().x,450.0 })) {
+			changeScene(U"Game");
+		}
+	}
+	void draw() const override {
+		font(getData().success ? U"おめでとう！" : U"残念！").drawAt({ Scene::CenterF().x,150.0 });
+	}
+};
+
+void Main() {
+	App manager;
+
+	manager.add<Title>(U"Title").add<Game>(U"Game").add<Result>(U"Result");
+
+	while (System::Update()) {
+		if (!manager.update()) {
+			break;
+		}
+	}
+}
